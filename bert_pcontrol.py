@@ -8,6 +8,7 @@ import re
 import subprocess
 
 method = 'pctrl'
+temp_target = int(sys.argv[1])
 
 # read support clock
 clocks = pd.read_csv('supported_clock.csv')
@@ -47,7 +48,7 @@ subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
 
 print('Start running inference')
 
-cmd = f'python bert_lat.py {method}'
+cmd = f'python bert_lat.py {method}_{temp_target}'
 pid = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).pid
 
 Tstart = time.time()
@@ -68,7 +69,7 @@ while True:
         break
     else:
         # control clock
-        curr_clk = adjust_clk(curr_clk, temp, 65, app_clks)
+        curr_clk = adjust_clk(curr_clk, int(temp), temp_target, app_clks)
         cmd = f'sudo nvidia-smi -i 0 -ac 5001,{curr_clk}' # starting clock by default
         subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
         time.sleep(5)
@@ -76,8 +77,8 @@ while True:
 cmd = f'pkill -2 -P {pid}'
 subprocess.Popen([cmd], shell=True)
 
-with open(f'logs/{method}_temp_bert.json', 'w') as f:
+with open(f'logs/{method}_{temp_target}_temp_bert.json', 'w') as f:
     json.dump(temp_list, f, indent=4)
-with open(f'logs/{method}_clk_bert.json', 'w') as f:
+with open(f'logs/{method}_{temp_target}_clk_bert.json', 'w') as f:
     json.dump(clk_list, f, indent=4)
 
