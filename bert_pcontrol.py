@@ -1,5 +1,3 @@
-from datasets import load_dataset
-from tensorflow import keras
 import time
 import json
 import signal
@@ -10,6 +8,24 @@ import re
 import subprocess
 
 method = 'pctrl'
+
+# read support clock
+clocks = pd.read_csv('supported_clock.csv')
+clocks = clocks[clocks['memory [MHz]']=='5001 MHz']
+app_clks = clocks[' graphics [MHz]'].tolist()
+app_clks = [int(re.findall(r'\d+', k)[0]) for k in app_clks][::-1]
+app_clks = [k for k in app_clks if k >= 585 and k <= 1005]
+
+def adjust_clk(curr_clk, curr_temp, set_point, app_clks):
+    curr_ind = app_clks.index(curr_clk)
+    diff = curr_temp - set_point
+    new_ind = curr_ind - diff # if diff > 0, temp too high, set to lower index to reduce clock
+    if new_ind > len(app_clks) - 1:
+        return app_clks[-1]
+    elif new_ind < 0:
+        return app_clks[0]
+    else:
+        return app_clks[new_ind]
 
 # first wait till temperature is below 50C
 print('Waiting for temperature to drop...')
@@ -34,41 +50,34 @@ print('Start running inference')
 cmd = f'python bert_lat.py {method}'
 pid = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).pid
 
-# read support clock
-clocks = pd.read_csv('supported_clock.csv')
-clocks = clocks[clocks['memory [MHz]']=='5001 MHz']
-app_clks = clocks[' graphics [MHz]'].tolist()
-app_clks = [int(re.findall(r'\d+', k)[0]) for k in app_clks][::-1]
-app_clks = [k for k in app_clks if k > 400 and k < 1300]
+Tstart = time.time()
+temp_list = []
+clk_list = []
+time_limit = 1800 # 30min
+curr_clk = 1005
+while True:
+    cmd = 'nvidia-smi --query-gpu=temperature.gpu,clocks.sm --format=csv,noheader,nounits'
+    p = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE)
+    out, err = p.communicate()
+    out = re.findall('\d+', str(out))
+    temp = out[0]
+    clk = out[1]
+    temp_list.append(int(temp))
+    clk_list.append(int(clk))
+    if time.time() - Tstart >= time_limit:
+        break
+    else:
+        # control clock
+        curr_clk = adjust_clk(curr_clk, temp, 65, app_clks)
+        cmd = f'sudo nvidia-smi -i 0 -ac 5001,{curr_clk}' # starting clock by default
+        subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
+        time.sleep(5)
 
+cmd = f'pkill -2 -P {pid}'
+subprocess.Popen([cmd], shell=True)
 
-
-
-for clk in app_clks:
-    while True:
-        # wait till the temperature is below 50C
-        cmd = 'nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader'
-        p = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE)
-        temp, err = p.communicate()
-        if int(temp) < 50:
-            break
-        else:
-            cmd = f'sudo nvidia-smi -i 0 -rac'
-            subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
-            # reset application clock to cool down
-            time.sleep(20)
-    batch_time[clk] = []
-    cmd = f'sudo nvidia-smi -i 0 -ac 5001,{clk}'
-    subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
-    print(clk)
-    for data in eval_tf_dataset:
-        start_time = time.time()
-        model.predict_on_batch(data)
-        duration = round(time.time() - start_time,3)
-        batch_time[clk].append(duration)
-
-with open(f'logs/clk_vs_lat/{gpu_type}_duration_bert_lat8.json', 'w') as f:
-    json.dump(batch_time, f, indent=4)
-with open(f'logs/clk_vs_lat/{gpu_type}_timestamp_bert_lat8.json', 'w') as f:
-    json.dump(iter_time, f, indent=4)
+with open(f'logs/{method}_temp_bert.json', 'w') as f:
+    json.dump(temp_list, f, indent=4)
+with open(f'logs/{method}_clk_bert.json', 'w') as f:
+    json.dump(clk_list, f, indent=4)
 
