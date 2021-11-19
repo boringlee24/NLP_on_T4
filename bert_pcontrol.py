@@ -7,8 +7,12 @@ import pandas as pd
 import re
 import subprocess
 
+# add set clock monitoring
+# add a multiplier p
+
 method = 'pctrl'
 temp_target = int(sys.argv[1])
+multiplier = int(sys.argv[2])
 
 # read support clock
 clocks = pd.read_csv('supported_clock.csv')
@@ -20,7 +24,7 @@ app_clks = [k for k in app_clks if k >= 585 and k <= 1005]
 def adjust_clk(curr_clk, curr_temp, set_point, app_clks):
     curr_ind = app_clks.index(curr_clk)
     diff = curr_temp - set_point
-    new_ind = curr_ind - diff # if diff > 0, temp too high, set to lower index to reduce clock
+    new_ind = curr_ind - diff * multiplier # if diff > 0, temp too high, set to lower index to reduce clock
     if new_ind > len(app_clks) - 1:
         return app_clks[-1]
     elif new_ind < 0:
@@ -54,6 +58,7 @@ pid = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE, stderr=subproc
 Tstart = time.time()
 temp_list = []
 clk_list = []
+curr_list = []
 time_limit = 1800 # 30min
 curr_clk = 1005
 while True:
@@ -65,6 +70,7 @@ while True:
     clk = out[1]
     temp_list.append(int(temp))
     clk_list.append(int(clk))
+    curr_list.append(curr_clk)
     if time.time() - Tstart >= time_limit:
         break
     else:
@@ -77,8 +83,10 @@ while True:
 cmd = f'pkill -2 -P {pid}'
 subprocess.Popen([cmd], shell=True)
 
-with open(f'logs/{method}_{temp_target}_temp_bert.json', 'w') as f:
+with open(f'logs/{method}_{temp_target}_x{multiplier}_temp_bert.json', 'w') as f:
     json.dump(temp_list, f, indent=4)
-with open(f'logs/{method}_{temp_target}_clk_bert.json', 'w') as f:
+with open(f'logs/{method}_{temp_target}_x{multiplier}_clkmeas_bert.json', 'w') as f:
     json.dump(clk_list, f, indent=4)
+with open(f'logs/{method}_{temp_target}_x{multiplier}_clkset_bert.json', 'w') as f:
+    json.dump(curr_list, f, indent=4)
 
