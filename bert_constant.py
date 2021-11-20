@@ -7,7 +7,8 @@ import pandas as pd
 import re
 import subprocess
 
-method = 'naive'
+method = 'constant'
+target = int(sys.argv[1])
 
 # first wait till temperature is below 50C
 print('Waiting for temperature to drop...')
@@ -21,9 +22,14 @@ while True:
     else:
         time.sleep(5)
 
+cmd = 'sudo nvidia-smi -i 0 -pm 1'
+subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
+cmd = f'sudo nvidia-smi -i 0 -ac 5001,{target}' # starting clock by default
+subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
+
 print('Start running inference')
 
-cmd = f'python bert_lat.py {method}'
+cmd = f'python bert_lat.py {method}_{target}'
 pid = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).pid
 
 # Start continuous temperature monitor (no needed for naive)
@@ -48,8 +54,8 @@ while True:
 cmd = f'pkill -2 -P {pid}'
 subprocess.Popen([cmd], shell=True)
 
-with open(f'logs/{method}_temp_bert.json', 'w') as f:
+with open(f'logs/{method}_{target}_temp_bert.json', 'w') as f:
     json.dump(temp_list, f, indent=4)
-with open(f'logs/{method}_clk_bert.json', 'w') as f:
+with open(f'logs/{method}_{target}_clk_bert.json', 'w') as f:
     json.dump(clk_list, f, indent=4)
 

@@ -52,7 +52,7 @@ subprocess.Popen([cmd], shell=True).communicate(input='456852@Kb\n')
 
 print('Start running inference')
 
-cmd = f'python bert_lat.py {method}_{temp_target}'
+cmd = f'python bert_lat.py {method}_{temp_target}_x{multiplier}'
 pid = subprocess.Popen([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).pid
 
 Tstart = time.time()
